@@ -1,6 +1,7 @@
 from __future__ import print_function
 import pandas as pd
 import numpy as np
+import scipy.sparse as sp
 import os,sys,argparse
 from collections import Counter,defaultdict
 import pickle
@@ -22,6 +23,37 @@ class sbmtm():
         self.groups = {} ## results of group membership from inference
         self.mdl = np.nan ## minimum description length of inferred state
         self.L = np.nan ## number of levels in hierarchy
+        
+    def make_graph_anndata(self, adata):
+        ncells, ngenes = adata.n_obs, adata.n_vars
+        nnodes = ncells + ngenes
+        adj = sp.lil_matrix((nnodes, nnodes))
+        
+        adj[:ncells, ncells:] = adata.X
+        #adj[ncells:, :ncells] = adata.X.T
+        adj = adj.tocoo()
+
+        g = gt.Graph(directed=False)
+
+        name = g.vp["name"] = g.new_vp("string")
+        kind = g.vp["kind"] = g.new_vp("int")
+        ecount = g.ep["count"] = g.new_ep("int")
+
+        g.add_vertex(n=nnodes)
+        g.add_edge_list(np.array(adj.nonzero()).T)
+
+        #name.a = np.concatenate([adata.obs.index.values, adata.var.index.values]).tolist()
+        name_list = np.concatenate([adata.obs.index.values, adata.var.index.values]).tolist()
+        for i in range(nnodes):
+            name[i] = name_list[i]
+
+        kind.a = np.array([0]*ncells + [1]*ngenes)
+        ecount.a = adj.data
+
+        self.g = g
+        self.words = adata.var.index.values.tolist()
+        self.documents = adata.obs.index.values.tolist()
+
 
     def make_graph(self,list_texts, documents = None, counts=True, n_min = None):
         '''
@@ -118,7 +150,7 @@ class sbmtm():
         self.documents = [ self.g.vp['name'][v] for v in  self.g.vertices() if self.g.vp['kind'][v]==0   ]
 
 
-    def fit(self,overlap = False, hierarchical = True, B_min = None, n_init = 1):
+    def fit(self,overlap = False, hierarchical = True, B_min = None, n_init = 1, **kwargs):
         '''
         Fit the sbm to the word-document network.
         - overlap, bool (default: False). Overlapping or Non-overlapping groups.
@@ -146,7 +178,7 @@ class sbmtm():
                 state_tmp = gt.minimize_nested_blockmodel_dl(g, deg_corr=True,
                                                      overlap=overlap,
                                                      state_args=state_args,
-                                                     B_min = B_min)
+                                                     B_min = B_min, **kwargs)
                 mdl_tmp = state_tmp.entropy()
                 if mdl_tmp < mdl:
                     mdl = 1.0*mdl_tmp
