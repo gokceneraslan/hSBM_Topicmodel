@@ -34,6 +34,7 @@ class sbmtm():
         adj = sp.lil_matrix((nnodes, nnodes))
 
         adj[:ncells, ncells:] = adata.X
+        #adj[ncells:, :ncells] = adata.X.T
         adj = adj.tocoo()
 
         g = gt.Graph(directed=False)
