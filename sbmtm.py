@@ -24,20 +24,20 @@ class sbmtm():
         self.mdl = np.nan ## minimum description length of inferred state
         self.L = np.nan ## number of levels in hierarchy
         
-    def make_graph_anndata(self, adata):
+    def make_graph_anndata(self, adata, weight_property='count', weight_type='int'):
         ncells, ngenes = adata.n_obs, adata.n_vars
         nnodes = ncells + ngenes
         adj = sp.lil_matrix((nnodes, nnodes))
         
         adj[:ncells, ncells:] = adata.X
-        #adj[ncells:, :ncells] = adata.X.T
         adj = adj.tocoo()
 
         g = gt.Graph(directed=False)
 
         name = g.vp["name"] = g.new_vp("string")
         kind = g.vp["kind"] = g.new_vp("int")
-        ecount = g.ep["count"] = g.new_ep("int")
+        if weight_property is not None:
+            ecount = g.ep[weight_property] = g.new_ep(weight_type)
 
         g.add_vertex(n=nnodes)
         g.add_edge_list(np.array(adj.nonzero()).T)
@@ -48,7 +48,8 @@ class sbmtm():
             name[i] = name_list[i]
 
         kind.a = np.array([0]*ncells + [1]*ngenes)
-        ecount.a = adj.data
+        if weight_property is not None:
+            ecount.a = adj.data
 
         self.g = g
         self.words = adata.var.index.values.tolist()
@@ -150,7 +151,7 @@ class sbmtm():
         self.documents = [ self.g.vp['name'][v] for v in  self.g.vertices() if self.g.vp['kind'][v]==0   ]
 
 
-    def fit(self,overlap = False, hierarchical = True, B_min = None, n_init = 1, **kwargs):
+    def fit(self,overlap = False, hierarchical = True, B_min = None, n_init = 1, state_kwargs=None, **kwargs):
         '''
         Fit the sbm to the word-document network.
         - overlap, bool (default: False). Overlapping or Non-overlapping groups.
@@ -171,7 +172,8 @@ class sbmtm():
             state_args = {'clabel': clabel, 'pclabel': clabel}
             if "count" in g.ep:
                 state_args["eweight"] = g.ep.count
-
+            if state_kwargs is not None:
+                state_args.update(state_kwargs)
             ## the inference
             mdl = np.inf ##
             for i_n_init in range(n_init):
