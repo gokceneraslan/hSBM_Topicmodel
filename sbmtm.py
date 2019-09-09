@@ -34,7 +34,6 @@ class sbmtm():
         adj = sp.lil_matrix((nnodes, nnodes))
 
         adj[:ncells, ncells:] = adata.X
-        #adj[ncells:, :ncells] = adata.X.T
         adj = adj.tocoo()
 
         g = gt.Graph(directed=False)
@@ -320,10 +319,8 @@ class sbmtm():
             state_args = {'clabel': clabel, 'pclabel': clabel}
             if "count" in g.ep:
                 state_args["eweight"] = g.ep.count
-
-            if state_args is not None:
-                state_args.update(state_args)
-
+            if state_kwargs is not None:
+                state_args.update(state_kwargs)
             ## the inference
             mdl = np.inf  ##
             for i_n_init in range(n_init):
