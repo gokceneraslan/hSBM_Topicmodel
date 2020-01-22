@@ -1,11 +1,8 @@
 from __future__ import print_function
 import pandas as pd
 import numpy as np
-<<<<<<< HEAD
 import scipy.sparse as sp
-=======
 import scipy
->>>>>>> origin-master
 import os,sys,argparse
 import scipy.sparse as sp
 import matplotlib.pyplot as plt
