@@ -40,7 +40,7 @@ class sbmtm():
 
         ## if there are no document titles, we assign integers 0,...,D-1
         ## otherwise we use supplied titles
-        if documents == None:
+        if documents is None:
             list_titles = [str(h) for h in range(D)]
         else:
             list_titles = documents
