@@ -1,11 +1,14 @@
 from __future__ import print_function
 import pandas as pd
 import numpy as np
+import scipy
 import os,sys,argparse
+import scipy.sparse as sp
 import matplotlib.pyplot as plt
 from collections import Counter,defaultdict
 import pickle
 import graph_tool.all as gt
+from joblib import Parallel, delayed
 
 
 class sbmtm():
@@ -102,6 +105,38 @@ class sbmtm():
         self.g = g
         self.words = [ g.vp['name'][v] for v in  g.vertices() if g.vp['kind'][v]==1   ]
         self.documents = [ g.vp['name'][v] for v in  g.vertices() if g.vp['kind'][v]==0   ]
+
+    def make_graph_anndata(self, adata, weight_property='count', weight_type='int'):
+        ncells, ngenes = adata.n_obs, adata.n_vars
+        nnodes = ncells + ngenes
+        adj = sp.lil_matrix((nnodes, nnodes))
+
+        adj[:ncells, ncells:] = adata.X
+        adj = adj.tocoo()
+
+        g = gt.Graph(directed=False)
+
+        name = g.vp["name"] = g.new_vp("string")
+        kind = g.vp["kind"] = g.new_vp("int")
+        if weight_property is not None:
+            ecount = g.ep[weight_property] = g.new_ep(weight_type)
+
+        g.add_vertex(n=nnodes)
+        g.add_edge_list(np.array(adj.nonzero()).T)
+
+        #name.a = np.concatenate([adata.obs.index.values, adata.var.index.values]).tolist()
+        name_list = np.concatenate([adata.obs.index.values, adata.var.index.values]).tolist()
+        for i in range(nnodes):
+            name[i] = name_list[i]
+
+        kind.a = np.array([0]*ncells + [1]*ngenes)
+        if weight_property is not None:
+            ecount.a = adj.data
+
+        self.g = g
+        self.words = adata.var.index.values.tolist()
+        self.documents = adata.obs.index.values.tolist()
+
 
     def make_graph_from_BoW_df(self, df, counts=True, n_min=None):
         """
@@ -210,7 +245,7 @@ class sbmtm():
         self.documents = [ self.g.vp['name'][v] for v in  self.g.vertices() if self.g.vp['kind'][v]==0   ]
 
 
-    def fit(self,overlap = False, hierarchical = True, B_min = None, n_init = 1,verbose=False):
+    def fit(self,overlap = False, hierarchical = True, B_min = None, n_init = 1, n_jobs = 1, verbose=False, state_args=None, **kwds):
         '''
         Fit the sbm to the word-document network.
         - overlap, bool (default: False). Overlapping or Non-overlapping groups.
@@ -232,14 +267,21 @@ class sbmtm():
             if "count" in g.ep:
                 state_args["eweight"] = g.ep.count
 
+            if state_args is not None:
+                state_args.update(state_args)
+
             ## the inference
             mdl = np.inf ##
+            runs = Parallel(n_jobs=n_jobs)(delayed(gt.minimize_nested_blockmodel_dl)(g,
+                                                                                     deg_corr=True,
+                                                                                     overlap=overlap,
+                                                                                     B_min=B_min,
+                                                                                     state_args=state_args,
+                                                                                     verbose=verbose,
+                                                                                     **kwds)
+                                           for _ in range(n_init))
             for i_n_init in range(n_init):
-                state_tmp = gt.minimize_nested_blockmodel_dl(g, deg_corr=True,
-                                                     overlap=overlap,
-                                                     state_args=state_args,
-                                                     B_min = B_min,
-                                                     verbose=verbose)
+                state_tmp = runs[i_n_init]
                 mdl_tmp = state_tmp.entropy()
                 if mdl_tmp < mdl:
                     mdl = 1.0*mdl_tmp
@@ -291,7 +333,10 @@ class sbmtm():
         return tuples (word,P(w|tw))
         '''
         # dict_groups = self.groups[l]
-        dict_groups = self.get_groups(l=l)
+        if l in self.groups:
+            dict_groups = self.groups[l]
+        else:
+            dict_groups = self.get_groups(l=l)
 
         Bw = dict_groups['Bw']
         p_w_tw = dict_groups['p_w_tw']
@@ -648,7 +693,7 @@ class sbmtm():
             self.state.print_summary()
 
     def plot_topic_dist(self, l):
-        groups = self.groups[l]
+        groups = self.get_groups(l=l)
         p_w_tw = groups['p_w_tw']
         fig=plt.figure(figsize=(12,10))
         plt.imshow(p_w_tw,origin='lower',aspect='auto',interpolation='none')
