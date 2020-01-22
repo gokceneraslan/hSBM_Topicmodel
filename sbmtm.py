@@ -295,7 +295,7 @@ class sbmtm():
         with open(filename, 'rb') as f:
             self = pickle.load(f)
 
-    def fit(self, overlap=False, hierarchical=True, B_min=None, B_max=None, n_init=1, parallel=False, verbose=False):
+    def fit(self, overlap=False, hierarchical=True, B_min=None, B_max=None, n_init=1, n_init_jobs=1, parallel=False, verbose=False):
         '''
         Fit the sbm to the word-document network.
         - overlap, bool (default: False). Overlapping or Non-overlapping groups.
@@ -323,28 +323,48 @@ class sbmtm():
                 state_args.update(state_kwargs)
             ## the inference
             mdl = np.inf  ##
-            for i_n_init in range(n_init):
-                state_tmp = gt.minimize_nested_blockmodel_dl(g,
-                                                             deg_corr=True,
-                                                             overlap=overlap,
-                                                             state_args=state_args,
-                                                             mcmc_args={'sequential': sequential},
-                                                             mcmc_equilibrate_args={
-                                                                 'mcmc_args': {'sequential': sequential}},
-                                                             mcmc_multilevel_args={
-                                                                 'mcmc_equilibrate_args': {
-                                                                     'mcmc_args': {'sequential': sequential}
-                                                                 },
-                                                                 'anneal_args': {
+
+            if n_init_jobs == 1:
+                for i_n_init in range(n_init):
+                    state_tmp = gt.minimize_nested_blockmodel_dl(g,
+                                                                 deg_corr=True,
+                                                                 overlap=overlap,
+                                                                 state_args=state_args,
+                                                                 mcmc_args={'sequential': sequential},
+                                                                 mcmc_equilibrate_args={
+                                                                     'mcmc_args': {'sequential': sequential}},
+                                                                 mcmc_multilevel_args={
                                                                      'mcmc_equilibrate_args': {
                                                                          'mcmc_args': {'sequential': sequential}
+                                                                     },
+                                                                     'anneal_args': {
+                                                                         'mcmc_equilibrate_args': {
+                                                                             'mcmc_args': {'sequential': sequential}
+                                                                         }
                                                                      }
-                                                                 }
-                                                             },
-                                                             B_min=B_min,
-                                                             B_max=B_max,
-                                                             verbose=verbose
-                                                             )
+                                                                 },
+                                                                 B_min=B_min,
+                                                                 B_max=B_max,
+                                                                 verbose=verbose
+                                                                 )
+                    mdl_tmp = state_tmp.entropy()
+                    if mdl_tmp < mdl:
+                        mdl = 1.0 * mdl_tmp
+                        state = state_tmp.copy()
+
+            else:
+
+                runs = Parallel(n_jobs=n_jobs)(delayed(gt.minimize_nested_blockmodel_dl)(g,
+                                                                                         deg_corr=True,
+                                                                                         overlap=overlap,
+                                                                                         B_min=B_min,
+                                                                                         state_args=state_args,
+                                                                                         verbose=verbose,
+                                                                                         **kwds)
+                                               for _ in range(n_init))
+                for i_n_init in range(n_init):
+                    state_tmp = runs[i_n_init]
+
                 mdl_tmp = state_tmp.entropy()
                 if mdl_tmp < mdl:
                     mdl = 1.0 * mdl_tmp
