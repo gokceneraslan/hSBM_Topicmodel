@@ -139,38 +139,6 @@ class sbmtm():
         self.words = [ g.vp['name'][v] for v in  g.vertices() if g.vp['kind'][v]==1   ]
         self.documents = [ g.vp['name'][v] for v in  g.vertices() if g.vp['kind'][v]==0   ]
 
-    def make_graph_anndata(self, adata, weight_property='count', weight_type='int'):
-        ncells, ngenes = adata.n_obs, adata.n_vars
-        nnodes = ncells + ngenes
-        adj = sp.lil_matrix((nnodes, nnodes))
-
-        adj[:ncells, ncells:] = adata.X
-        adj = adj.tocoo()
-
-        g = gt.Graph(directed=False)
-
-        name = g.vp["name"] = g.new_vp("string")
-        kind = g.vp["kind"] = g.new_vp("int")
-        if weight_property is not None:
-            ecount = g.ep[weight_property] = g.new_ep(weight_type)
-
-        g.add_vertex(n=nnodes)
-        g.add_edge_list(np.array(adj.nonzero()).T)
-
-        #name.a = np.concatenate([adata.obs.index.values, adata.var.index.values]).tolist()
-        name_list = np.concatenate([adata.obs.index.values, adata.var.index.values]).tolist()
-        for i in range(nnodes):
-            name[i] = name_list[i]
-
-        kind.a = np.array([0]*ncells + [1]*ngenes)
-        if weight_property is not None:
-            ecount.a = adj.data
-
-        self.g = g
-        self.words = adata.var.index.values.tolist()
-        self.documents = adata.obs.index.values.tolist()
-
-
     def make_graph_from_BoW_df(self, df, counts=True, n_min=None):
         """
         Load a graph from a Bag of Words DataFrame
