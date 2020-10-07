@@ -263,7 +263,7 @@ class sbmtm():
         with open(filename, 'rb') as f:
             self = pickle.load(f)
 
-    def fit(self, overlap=False, hierarchical=True, B_min=None, B_max=None, n_init=1, n_init_jobs=1, parallel=False, verbose=False):
+    def fit(self, overlap=False, hierarchical=True, B_min=None, B_max=None, n_init=1, n_init_jobs=1, parallel=False, verbose=False, **kwds):
         '''
         Fit the sbm to the word-document network.
         - overlap, bool (default: False). Overlapping or Non-overlapping groups.
@@ -311,7 +311,8 @@ class sbmtm():
                                                                  },
                                                                  B_min=B_min,
                                                                  B_max=B_max,
-                                                                 verbose=verbose
+                                                                 verbose=verbose,
+                                                                 **kwds
                                                                  )
                     mdl_tmp = state_tmp.entropy()
                     if mdl_tmp < mdl:
